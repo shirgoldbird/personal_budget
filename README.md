@@ -15,7 +15,7 @@ A simple and efficient backend for a personal budgeting application that connect
 - Python 3.8 or higher
 - A Teller API account with certificates (for production use)
 - A Google Cloud Platform account with Sheets API enabled
-- A Google Sheet set up with a "Transactions" tab
+- A Google Sheet set up and shared with the GCP service account
 
 ### Set up Teller
 
@@ -92,12 +92,24 @@ cp transaction_mappings.json.example transaction_mappings.json
 ## Running the application
 
 ```bash
-# Development mode
+# Development mode with auto-reload
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+# Or directly through the app
 python app.py
 
-# Production mode with gunicorn
-gunicorn app:app --bind 0.0.0.0:5000
+# Production mode
+uvicorn app:app --host 0.0.0.0 --port 8000
 ```
+
+## API Documentation
+
+FastAPI automatically generates interactive API documentation:
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+You can use these interfaces to explore and test the API endpoints.
 
 ## Deployment Options
 
