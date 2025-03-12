@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Budget Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .institution-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .view-accounts-btn {
+            background-color: #2196F3;
+        }
+        .view-accounts-btn:hover {
+            background-color: #0b7dda;
+        }
+        .disconnect-btn {
+            background-color: #f44336;
+        }
+        .disconnect-btn:hover {
+            background-color: #da190b;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Personal Budget Tracker</h1>
+        <button id="connect-bank-btn">Connect a Bank</button>
+    </header>
+
+    <main>
+        <section>
+            <h2>Connected Banks</h2>
+            <div id="institutions-list">
+                <p>Loading connected banks...</p>
+            </div>
+        </section>
+
+        <section id="accounts-section" style="display: none;">
+            <h2>Accounts</h2>
+            <div id="accounts-list"></div>
+        </section>
+
+        <section id="transactions-section" style="display: none;">
+            <h2>Transactions</h2>
+            <div>
+                <button id="export-transactions-btn">Export to Google Sheets</button>
+            </div>
+            <div id="transactions-list"></div>
+        </section>
+    </main>
+
+    <!-- Include Teller Connect -->
+    <script src="https://cdn.teller.io/connect/connect.js"></script>
+    
+    <!-- Include our frontend implementation -->
+    <script src="static/frontend_teller_setup.js"></script>
+</body>
+</html>

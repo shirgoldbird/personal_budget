@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any, Union
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel, Field
 import requests
 from google.oauth2.service_account import Credentials
@@ -28,6 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Configuration
 class Config:
     TELLER_BASE_URL = os.environ.get('TELLER_BASE_URL', 'https://api.teller.io')
@@ -38,6 +41,35 @@ class Config:
     CATEGORIES_FILE = os.environ.get('CATEGORIES_FILE', 'categories.json')
     TRANSACTION_MAPPING_FILE = os.environ.get('TRANSACTION_MAPPING_FILE', 'transaction_mappings.json')
     CREDS_DIR = os.environ.get('CREDS_DIR', 'creds')
+    STATIC_DIR = os.environ.get('STATIC_DIR', 'static')
+    HTML_TEMPLATE_DIR = os.environ.get('HTML_TEMPLATE_DIR', 'templates')
+
+# Set up static file serving
+static_dir = Path(Config.STATIC_DIR)
+templates_dir = Path(Config.HTML_TEMPLATE_DIR)
+static_dir.mkdir(exist_ok=True)
+templates_dir.mkdir(exist_ok=True)
+
+# Copy the frontend files to the static directory if they don't exist
+def setup_static_files():
+    # JavaScript file
+    js_file = static_dir / "frontend_teller_setup.js"
+    if not js_file.exists():
+        example_js = Path("frontend_teller_setup.js.example")
+        if example_js.exists():
+            js_file.write_text(example_js.read_text())
+    
+    # HTML file
+    html_file = templates_dir / "index.html"
+    if not html_file.exists():
+        example_html = Path("index.html.example")
+        if example_html.exists():
+            html_file.write_text(example_html.read_text())
+
+setup_static_files()
+
+# Mount the static directory
+app.mount("/static", StaticFiles(directory=Config.STATIC_DIR), name="static")
 
 # Pydantic models
 class Category(BaseModel):
@@ -527,6 +559,27 @@ async def delete_teller_token(institution_name: str):
         raise HTTPException(status_code=400, detail="Failed to delete token")
     
     return {"success": True, "message": f"Token for {institution_name} deleted successfully"}
+
+# Routes for HTML pages
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    """Serve the main index.html page"""
+    index_path = templates_dir / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text())
+    else:
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Personal Budget Tracker</title>
+        </head>
+        <body>
+            <h1>Personal Budget Tracker</h1>
+            <p>Welcome to your personal budget tracker. The page template could not be found.</p>
+        </body>
+        </html>
+        """)
 
 @app.get("/health")
 async def health_check():
