@@ -7,10 +7,12 @@ import requests
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import uuid
+from dotenv import load_dotenv
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+load_dotenv()
 
 # Configuration
 class Config:
@@ -73,10 +75,78 @@ class GoogleSheetsClient:
             )
             self.service = build('sheets', 'v4', credentials=self.creds)
             self.sheet = self.service.spreadsheets()
+            
+            # Check and set up the transactions sheet if needed
+            self._ensure_transactions_sheet()
+
+    def _ensure_transactions_sheet(self):
+        """Ensures the Transactions sheet exists with proper headers"""
+        if not self.creds or not self.sheet_id:
+            return
+            
+        try:
+            # Check if sheet exists
+            metadata = self.sheet.get(spreadsheetId=self.sheet_id).execute()
+            sheet_exists = False
+            
+            for sheet in metadata.get('sheets', []):
+                if sheet.get('properties', {}).get('title') == 'Transactions':
+                    sheet_exists = True
+                    break
+            
+            # If sheet doesn't exist, create it
+            if not sheet_exists:
+                request = {
+                    'addSheet': {
+                        'properties': {
+                            'title': 'Transactions',
+                            'gridProperties': {
+                                'rowCount': 1000,
+                                'columnCount': 10
+                            }
+                        }
+                    }
+                }
+                
+                body = {'requests': [request]}
+                self.sheet.batchUpdate(spreadsheetId=self.sheet_id, body=body).execute()
+                print("Created 'Transactions' sheet")
+            
+            # Check if headers exist
+            result = self.sheet.values().get(
+                spreadsheetId=self.sheet_id,
+                range='Transactions!A1:H1'
+            ).execute()
+            
+            headers = result.get('values', [[]])[0] if 'values' in result else []
+            expected_headers = [
+                'Transaction ID', 'Date', 'Account ID', 'Description', 
+                'Amount', 'Category', 'Notes', 'Timestamp'
+            ]
+            
+            # If no headers or incomplete headers, add them
+            if len(headers) < len(expected_headers):
+                body = {
+                    'values': [expected_headers]
+                }
+                
+                self.sheet.values().update(
+                    spreadsheetId=self.sheet_id,
+                    range='Transactions!A1:H1',
+                    valueInputOption='RAW',
+                    body=body
+                ).execute()
+                print("Added headers to Transactions sheet")
+                
+        except Exception as e:
+            print(f"Error setting up Google Sheet: {e}")
 
     def append_transactions(self, transactions):
         if not self.creds or not self.sheet_id:
             return {'error': 'Google Sheets credentials or Sheet ID not configured'}
+        
+        # Ensure sheet is set up before appending
+        self._ensure_transactions_sheet()
         
         values = []
         for tx in transactions:
