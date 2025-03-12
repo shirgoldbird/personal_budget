@@ -1,18 +1,32 @@
 import os
 import json
 from datetime import datetime
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from typing import List, Dict, Optional, Any, Union
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, Body
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 import requests
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import uuid
+import uvicorn
+from teller_token_manager import TellerTokenManager
 from dotenv import load_dotenv
-
-# Initialize Flask app
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 load_dotenv()
+
+# Initialize FastAPI app
+app = FastAPI(title="Personal Budgeting API", 
+              description="API for personal budgeting with Teller integration")
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configuration
 class Config:
@@ -23,6 +37,46 @@ class Config:
     GOOGLE_CREDS_PATH = os.environ.get('GOOGLE_CREDS_PATH')
     CATEGORIES_FILE = os.environ.get('CATEGORIES_FILE', 'categories.json')
     TRANSACTION_MAPPING_FILE = os.environ.get('TRANSACTION_MAPPING_FILE', 'transaction_mappings.json')
+    CREDS_DIR = os.environ.get('CREDS_DIR', 'creds')
+
+# Pydantic models
+class Category(BaseModel):
+    id: Optional[str] = None
+    name: str
+    color: Optional[str] = None
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+class Mapping(BaseModel):
+    pattern: str
+    category_id: str
+
+class Transaction(BaseModel):
+    id: str
+    date: str
+    account_id: str
+    description: str
+    amount: str
+    category: Optional[str] = None
+    notes: Optional[str] = None
+
+class TransactionBatch(BaseModel):
+    transactions: List[Transaction]
+
+class TellerEnrollment(BaseModel):
+    accessToken: str
+    user: Dict[str, Any]
+    enrollment: Dict[str, Any]
+    signatures: Optional[List[str]] = None
+
+class TellerTokenInfo(BaseModel):
+    institution_name: str
+    access_token: Optional[str] = None
+    institution_id: Optional[str] = None
+    user_id: Optional[str] = None
+    enrollment_id: Optional[str] = None
 
 # Teller client
 class TellerClient:
@@ -151,13 +205,13 @@ class GoogleSheetsClient:
         values = []
         for tx in transactions:
             values.append([
-                tx.get('id', ''),
-                tx.get('date', ''),
-                tx.get('account_id', ''),
-                tx.get('description', ''),
-                tx.get('amount', ''),
-                tx.get('category', ''),
-                tx.get('notes', ''),
+                tx.id,
+                tx.date,
+                tx.account_id,
+                tx.description,
+                tx.amount,
+                tx.category,
+                tx.notes or '',
                 datetime.now().isoformat()
             ])
         
@@ -220,29 +274,28 @@ class CategoryManager:
     def get_categories(self):
         return self.categories
     
-    def add_category(self, category):
-        if not category or 'name' not in category:
-            return False
-        
+    def add_category(self, category_data):
         # Check if name already exists
         for existing in self.categories:
-            if existing.get('name') == category.get('name'):
+            if existing.get('name') == category_data.name:
                 return False
         
         # Add unique ID if not provided
-        if 'id' not in category:
-            category['id'] = str(uuid.uuid4())
+        category_dict = category_data.dict()
+        if not category_dict.get('id'):
+            category_dict['id'] = str(uuid.uuid4())
         
-        self.categories.append(category)
+        self.categories.append(category_dict)
         self._save_categories()
         return True
     
     def update_category(self, category_id, updated_category):
         for i, cat in enumerate(self.categories):
             if cat.get('id') == category_id:
-                # Preserve the ID
-                updated_category['id'] = category_id
-                self.categories[i] = updated_category
+                # Update only provided fields while preserving the ID
+                update_dict = updated_category.dict(exclude_unset=True)
+                self.categories[i].update(update_dict)
+                self.categories[i]['id'] = category_id  # Ensure ID doesn't change
                 self._save_categories()
                 return True
         return False
@@ -272,7 +325,7 @@ class CategoryManager:
     
     def categorize_transaction(self, transaction):
         """Auto-categorize a transaction based on mappings"""
-        description = transaction.get('description', '').lower()
+        description = transaction.description.lower()
         
         # Check for direct matches in mappings
         for pattern, category_id in self.mappings.items():
@@ -290,119 +343,195 @@ class CategoryManager:
 teller_client = TellerClient()
 sheets_client = GoogleSheetsClient()
 category_manager = CategoryManager()
+token_manager = TellerTokenManager(Config.CREDS_DIR)
+
+# Dependency to get Teller token from header or parameter
+async def get_teller_token(
+    x_teller_token: Optional[str] = Header(None), 
+    institution: Optional[str] = None
+):
+    # If a specific header token is provided, use that
+    if x_teller_token:
+        return x_teller_token
+    
+    # If an institution name is provided, try to get token for that institution
+    if institution:
+        token = token_manager.get_token_by_institution(institution)
+        if token:
+            return token
+    
+    # If no valid token can be found, raise an error
+    raise HTTPException(
+        status_code=401, 
+        detail="Valid Teller token required. Provide X-Teller-Token header or institution parameter."
+    )
 
 # Routes
-@app.route('/api/accounts', methods=['GET'])
-def list_accounts():
-    access_token = request.headers.get('X-Teller-Token')
-    if not access_token:
-        return jsonify({'error': 'X-Teller-Token header is required'}), 401
-    
-    client = TellerClient(access_token)
+@app.get("/api/accounts")
+async def list_accounts(
+    token: str = Depends(get_teller_token),
+    institution: Optional[str] = None
+):
+    client = TellerClient(token)
     accounts = client.list_accounts()
-    return jsonify(accounts)
-
-@app.route('/api/accounts/<account_id>/transactions', methods=['GET'])
-def list_transactions(account_id):
-    access_token = request.headers.get('X-Teller-Token')
-    if not access_token:
-        return jsonify({'error': 'X-Teller-Token header is required'}), 401
     
-    client = TellerClient(access_token)
+    if 'error' in accounts:
+        raise HTTPException(status_code=accounts.get('status_code', 400), detail=accounts['error'])
+    
+    return accounts
+
+@app.get("/api/accounts/{account_id}/transactions")
+async def list_transactions(
+    account_id: str, 
+    token: str = Depends(get_teller_token),
+    institution: Optional[str] = None
+):
+    client = TellerClient(token)
     transactions = client.list_transactions(account_id)
+    
+    if 'error' in transactions:
+        raise HTTPException(status_code=transactions.get('status_code', 400), detail=transactions['error'])
     
     # Add category field to each transaction if missing
     for tx in transactions:
         if 'category' not in tx:
-            tx['category'] = category_manager.categorize_transaction(tx)
+            # Convert dict to Transaction model and back for categorization
+            tx_model = Transaction(
+                id=tx.get('id', ''),
+                date=tx.get('date', ''),
+                account_id=tx.get('account_id', ''),
+                description=tx.get('description', ''),
+                amount=tx.get('amount', '')
+            )
+            tx['category'] = category_manager.categorize_transaction(tx_model)
     
-    return jsonify(transactions)
+    return transactions
 
-@app.route('/api/transactions/categorize', methods=['POST'])
-def categorize_transactions():
-    data = request.json
-    if not data or 'transactions' not in data:
-        return jsonify({'error': 'Invalid request format'}), 400
-    
-    transactions = data['transactions']
+@app.post("/api/transactions/categorize")
+async def categorize_transactions(data: TransactionBatch):
     categorized = []
     
-    for tx in transactions:
+    for tx in data.transactions:
         # If category not provided, auto-categorize
-        if 'category' not in tx:
-            tx['category'] = category_manager.categorize_transaction(tx)
+        if not tx.category:
+            tx.category = category_manager.categorize_transaction(tx)
         categorized.append(tx)
     
-    return jsonify(categorized)
+    return categorized
 
-@app.route('/api/transactions/export', methods=['POST'])
-def export_transactions():
-    data = request.json
-    if not data or 'transactions' not in data:
-        return jsonify({'error': 'Invalid request format'}), 400
+@app.post("/api/transactions/export")
+async def export_transactions(data: TransactionBatch):
+    result = sheets_client.append_transactions(data.transactions)
     
-    result = sheets_client.append_transactions(data['transactions'])
-    return jsonify(result)
-
-@app.route('/api/categories', methods=['GET'])
-def get_categories():
-    return jsonify(category_manager.get_categories())
-
-@app.route('/api/categories', methods=['POST'])
-def add_category():
-    data = request.json
-    if not data:
-        return jsonify({'error': 'Invalid request format'}), 400
+    if 'error' in result:
+        raise HTTPException(status_code=400, detail=result['error'])
     
-    success = category_manager.add_category(data)
-    if success:
-        return jsonify({'success': True, 'categories': category_manager.get_categories()})
-    return jsonify({'error': 'Failed to add category'}), 400
+    return result
 
-@app.route('/api/categories/<category_id>', methods=['PUT'])
-def update_category(category_id):
-    data = request.json
-    if not data:
-        return jsonify({'error': 'Invalid request format'}), 400
+@app.get("/api/categories")
+async def get_categories():
+    return category_manager.get_categories()
+
+@app.post("/api/categories")
+async def add_category(category: Category):
+    success = category_manager.add_category(category)
     
-    success = category_manager.update_category(category_id, data)
-    if success:
-        return jsonify({'success': True, 'categories': category_manager.get_categories()})
-    return jsonify({'error': 'Category not found'}), 404
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to add category. Name may already exist.")
+    
+    return {"success": True, "categories": category_manager.get_categories()}
 
-@app.route('/api/categories/<category_id>', methods=['DELETE'])
-def delete_category(category_id):
+@app.put("/api/categories/{category_id}")
+async def update_category(category_id: str, category: CategoryUpdate):
+    success = category_manager.update_category(category_id, category)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    return {"success": True, "categories": category_manager.get_categories()}
+
+@app.delete("/api/categories/{category_id}")
+async def delete_category(category_id: str):
     success = category_manager.delete_category(category_id)
-    if success:
-        return jsonify({'success': True, 'categories': category_manager.get_categories()})
-    return jsonify({'error': 'Category not found'}), 404
-
-@app.route('/api/mappings', methods=['GET'])
-def get_mappings():
-    return jsonify(category_manager.get_mappings())
-
-@app.route('/api/mappings', methods=['POST'])
-def add_mapping():
-    data = request.json
-    if not data or 'pattern' not in data or 'category_id' not in data:
-        return jsonify({'error': 'Invalid request format'}), 400
     
-    success = category_manager.add_mapping(data['pattern'], data['category_id'])
-    if success:
-        return jsonify({'success': True, 'mappings': category_manager.get_mappings()})
-    return jsonify({'error': 'Failed to add mapping'}), 400
+    if not success:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    return {"success": True, "categories": category_manager.get_categories()}
 
-@app.route('/api/mappings/<pattern>', methods=['DELETE'])
-def delete_mapping(pattern):
+@app.get("/api/mappings")
+async def get_mappings():
+    return category_manager.get_mappings()
+
+@app.post("/api/mappings")
+async def add_mapping(mapping: Mapping):
+    success = category_manager.add_mapping(mapping.pattern, mapping.category_id)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to add mapping")
+    
+    return {"success": True, "mappings": category_manager.get_mappings()}
+
+@app.delete("/api/mappings/{pattern}")
+async def delete_mapping(pattern: str):
     success = category_manager.delete_mapping(pattern)
-    if success:
-        return jsonify({'success': True, 'mappings': category_manager.get_mappings()})
-    return jsonify({'error': 'Mapping not found'}), 404
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    
+    return {"success": True, "mappings": category_manager.get_mappings()}
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "ok"})
+# Teller Connect integration endpoints
+@app.post("/api/teller/store-token")
+async def store_teller_token(enrollment: TellerEnrollment):
+    """
+    Store a Teller access token received from Teller Connect
+    This endpoint is intended to be called from your frontend after successful enrollment
+    """
+    success = token_manager.store_teller_enrollment(enrollment.dict())
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to store token")
+    
+    return {"success": True, "message": "Token stored successfully"}
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=os.environ.get('DEBUG', 'False').lower() == 'true')
+@app.get("/api/teller/tokens")
+async def list_teller_tokens():
+    """List all stored Teller tokens with institution information"""
+    tokens = token_manager.get_all_tokens()
+    
+    # Sanitize the response to not include the actual tokens in the response
+    sanitized_tokens = []
+    for token in tokens:
+        sanitized_tokens.append({
+            "institution_name": token.get("institution_name"),
+            "institution_id": token.get("institution_id"),
+            "enrollment_id": token.get("enrollment_id"),
+            "created_at": token.get("created_at"),
+            "last_updated": token.get("last_updated")
+        })
+    
+    return sanitized_tokens
+
+@app.delete("/api/teller/tokens/{institution_name}")
+async def delete_teller_token(institution_name: str):
+    """Delete a Teller token for a specific institution"""
+    token = token_manager.get_token_by_institution(institution_name)
+    
+    if not token:
+        raise HTTPException(status_code=404, detail=f"No token found for institution: {institution_name}")
+    
+    success = token_manager.delete_token(token)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to delete token")
+    
+    return {"success": True, "message": f"Token for {institution_name} deleted successfully"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=os.environ.get('DEBUG', 'False').lower() == 'true')
