@@ -1,0 +1,51 @@
+{
+  "walmart": "cat_001",
+  "kroger": "cat_001",
+  "safeway": "cat_001",
+  "trader joe": "cat_001",
+  "whole foods": "cat_001",
+  
+  "uber eats": "cat_005",
+  "doordash": "cat_005",
+  "grubhub": "cat_005",
+  "mcdonald": "cat_005",
+  "restaurant": "cat_005",
+  
+  "rent": "cat_002",
+  "mortgage": "cat_002",
+  
+  "netflix": "cat_004",
+  "hulu": "cat_004",
+  "disney+": "cat_004",
+  "spotify": "cat_004",
+  "movie": "cat_004",
+  "theater": "cat_004",
+  
+  "electric": "cat_003",
+  "water": "cat_003",
+  "gas": "cat_003",
+  "internet": "cat_003",
+  "utility": "cat_003",
+  
+  "uber": "cat_006",
+  "lyft": "cat_006",
+  "transit": "cat_006",
+  "subway": "cat_006",
+  "bus": "cat_006",
+  "gas station": "cat_006",
+  
+  "doctor": "cat_007",
+  "pharmacy": "cat_007",
+  "medical": "cat_007",
+  "healthcare": "cat_007",
+  
+  "deposit": "cat_008",
+  "payroll": "cat_008",
+  "salary": "cat_008",
+  "direct deposit": "cat_008",
+  
+  "amazon": "cat_009",
+  "target": "cat_009",
+  "best buy": "cat_009",
+  "clothing": "cat_009"
+}
