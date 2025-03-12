@@ -17,6 +17,17 @@ A simple and efficient backend for a personal budgeting application that connect
 - A Google Cloud Platform account with Sheets API enabled
 - A Google Sheet set up with a "Transactions" tab
 
+### Set up Teller
+
+Sign up at https://teller.io/ and save the downloaded credentials.
+
+### Set up Google Sheets
+
+1. Create a Google Cloud Platform project
+2. Enable the Google Sheets API
+3. Create a service account and download the credentials JSON file
+4. Create a Google Sheet and share it with the service account email
+
 ## Installation
 
 ### 1. Clone this repository
@@ -52,7 +63,7 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Edit the `.env` file with your configuration:
+Edit the `.env` file with your configuration. We recommend creating a `creds/` directory to store the various files (anything in there will be automatically git ignored).
 
 ```
 # Teller API Configuration
@@ -77,22 +88,6 @@ Create initial category and mapping files:
 cp categories.json.example categories.json
 cp transaction_mappings.json.example transaction_mappings.json
 ```
-
-### 6. Set up Google Sheets
-
-1. Create a Google Cloud Platform project
-2. Enable the Google Sheets API
-3. Create a service account and download the credentials JSON file
-4. Create a Google Sheet and share it with the service account email
-5. Set up a sheet named "Transactions" with these columns:
-   - Transaction ID
-   - Date
-   - Account ID
-   - Description
-   - Amount
-   - Category
-   - Notes
-   - Timestamp
 
 ## Running the application
 
