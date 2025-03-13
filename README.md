@@ -2,6 +2,12 @@
 
 A simple and efficient FastAPI backend for a personal budgeting application that connects to your bank accounts through Teller API, allows transaction categorization, and exports to Google Sheets.
 
+<img width="1165" alt="image" src="https://github.com/user-attachments/assets/10e3334e-ae3c-4b39-8da5-d80336fc13f8" />
+<img width="1171" alt="image" src="https://github.com/user-attachments/assets/dcd9de9c-7845-456c-b59e-1a74fb948d77" />
+<img width="1195" alt="image" src="https://github.com/user-attachments/assets/14267c9b-3817-45e6-99d2-822e033f284d" />
+<img width="1201" alt="image" src="https://github.com/user-attachments/assets/7c019b8f-15e1-47c0-a9bc-73cc4fd31dde" />
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/c139d8d8-cb90-4f01-8eb5-e8fb6580cc85" />
+
 ## Features
 
 - Secure connection to bank accounts via Teller API
