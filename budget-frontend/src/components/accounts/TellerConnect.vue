@@ -37,6 +37,7 @@ function initializeTellerConnect() {
       applicationId: import.meta.env.VITE_TELLER_APP_ID || 'app_pb2s7s7kc4918jnrms000',
       environment: import.meta.env.VITE_TELLER_ENVIRONMENT || 'sandbox',
       products: ["transactions", "balance", "identity", "verify"],
+      selectAccount: "multiple",
       
       onInit: function() {
         console.log("Teller Connect has initialized");
