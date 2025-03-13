@@ -1,46 +1,58 @@
-# Personal Budgeting Backend
+# Personal Budget Tracker
 
-A simple and efficient FastAPI backend for a personal budgeting application that connects to your bank accounts through Teller API, allows transaction categorization, and exports to Google Sheets.
+A comprehensive personal finance application that connects to your bank accounts through the Teller API, categorizes transactions, visualizes spending patterns, and helps you manage your budget effectively.
 
-<img width="1165" alt="image" src="https://github.com/user-attachments/assets/10e3334e-ae3c-4b39-8da5-d80336fc13f8" />
-<img width="1171" alt="image" src="https://github.com/user-attachments/assets/dcd9de9c-7845-456c-b59e-1a74fb948d77" />
-<img width="1195" alt="image" src="https://github.com/user-attachments/assets/14267c9b-3817-45e6-99d2-822e033f284d" />
-<img width="1201" alt="image" src="https://github.com/user-attachments/assets/7c019b8f-15e1-47c0-a9bc-73cc4fd31dde" />
-<img width="909" alt="image" src="https://github.com/user-attachments/assets/c139d8d8-cb90-4f01-8eb5-e8fb6580cc85" />
+<img width="1165" alt="Dashboard view showing spending overview" src="https://github.com/user-attachments/assets/10e3334e-ae3c-4b39-8da5-d80336fc13f8" />
+
+<img width="1171" alt="Transactions page with filtering and categorization" src="https://github.com/user-attachments/assets/dcd9de9c-7845-456c-b59e-1a74fb948d77" />
+
+<img width="1195" alt="Accounts view displaying connected banks" src="https://github.com/user-attachments/assets/14267c9b-3817-45e6-99d2-822e033f284d" />
+
+<img width="1201" alt="Categories management page" src="https://github.com/user-attachments/assets/7c019b8f-15e1-47c0-a9bc-73cc4fd31dde" />
+
+<img width="909" alt="Auto-categorization rules setup" src="https://github.com/user-attachments/assets/c139d8d8-cb90-4f01-8eb5-e8fb6580cc85" />
 
 ## Features
 
-- Secure connection to bank accounts via Teller API
-- Integration with Teller Connect for user authentication
-- Management of multiple bank connection tokens
-- Auto-categorization of transactions based on description patterns
-- Custom transaction categories with color coding
-- Export of transactions to Google Sheets
-- Modern FastAPI backend with automatic OpenAPI documentation
-- Simple web interface to connect to banks and manage transactions
-- OpenAPI specification in JSON and YAML formats
-- Type validation with Pydantic models
-- RESTful API for future frontend integration
+- **Bank Integration**: Secure connection to financial institutions via Teller API
+- **Transaction Management**: View, search, and categorize your transactions
+- **Automated Categorization**: Define rules to automatically categorize transactions based on description patterns 
+- **Data Visualization**: Charts and graphs to visualize spending patterns
+- **Category Management**: Create and customize transaction categories with color coding
+- **Google Sheets Export**: Export transactions for additional analysis or record-keeping
+- **Responsive Design**: Works on desktop and mobile devices
+- **Multi-bank Support**: Connect and manage multiple bank accounts in one place
+
+## Project Structure
+
+The application consists of two main components:
+
+- **Backend**: FastAPI application that handles API requests, Teller integration, and data processing
+- **Frontend**: Vue.js application with a responsive UI for managing your finances
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- A Teller API account with certificates (for production use)
-- A Google Cloud Platform account with Sheets API enabled
-- A Google Sheet set up with a "Transactions" tab
+- Python 3.8+ (for backend)
+- Node.js 16+ (for frontend)
+- A Teller API account with application ID ([Sign up here](https://teller.io))
+- For production: Teller API certificates
+- Optional: Google Cloud Platform account with Sheets API enabled (for Google Sheets export)
 
-## Installation
+## Installation and Setup
 
-### 1. Clone this repository
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/personal-budgeting-backend.git
-cd personal-budgeting-backend
+git clone https://github.com/shirgoldbird/personal_budget.git
+cd personal_budget
 ```
 
-### 2. Set up a virtual environment
+### 2. Backend Setup
+
+#### Set up a virtual environment
 
 ```bash
+cd backend
 python -m venv venv
 
 # On Windows
@@ -50,13 +62,13 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 3. Install dependencies
+#### Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Run the setup script
+#### Run the setup script
 
 ```bash
 python setup.py
@@ -64,9 +76,9 @@ python setup.py
 
 This will create the required directories and copy example files to their proper locations.
 
-### 5. Configure environment variables
+#### Configure environment variables
 
-Edit the `.env` file with your configuration:
+Edit the `.env` file in the backend directory:
 
 ```
 # Teller API Configuration
@@ -74,7 +86,7 @@ TELLER_BASE_URL=https://api.teller.io
 TELLER_CERT_PATH=path/to/cert.pem
 TELLER_KEY_PATH=path/to/key.pem
 
-# Google Sheets Configuration
+# Google Sheets Configuration (Optional)
 GOOGLE_SHEET_ID=your_sheet_id_here
 GOOGLE_CREDS_PATH=path/to/google_credentials.json
 
@@ -90,83 +102,100 @@ STATIC_DIR=static
 HTML_TEMPLATE_DIR=templates
 ```
 
-### 5. Set up categories and transaction mappings
+#### Google Sheets Setup (Optional)
 
-Create initial category and mapping files:
-
-```bash
-cp categories.json.example categories.json
-cp transaction_mappings.json.example transaction_mappings.json
-```
-
-### 6. Set up Google Sheets
+If you want to use the Google Sheets export feature:
 
 1. Create a Google Cloud Platform project
 2. Enable the Google Sheets API
 3. Create a service account and download the credentials JSON file
 4. Create a Google Sheet and share it with the service account email
-5. Set up a sheet named "Transactions" with these columns:
-   - Transaction ID
-   - Date
-   - Account ID
-   - Description
-   - Amount
-   - Category
-   - Notes
-   - Timestamp
-
-## Running the application
+5. Run the setup script:
 
 ```bash
+python setup_google_sheet.py --creds path/to/credentials.json --sheet-name "My Budget Tracker"
+```
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+```
+
+#### Configure environment variables
+
+Create a `.env` file in the frontend directory:
+
+```
+VITE_API_URL=http://localhost:8000/api
+VITE_TELLER_APP_ID=your_teller_app_id
+VITE_TELLER_ENVIRONMENT=sandbox  # or development, production
+```
+
+## Running the Application
+
+### Start the Backend
+
+```bash
+# From the backend directory
 # Development mode with auto-reload
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
-# Or directly through the app
+# Or directly
 python app.py
-
-# Production mode
-uvicorn app:app --host 0.0.0.0 --port 8000
 ```
+
+### Start the Frontend
+
+```bash
+# From the frontend directory
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173` by default.
 
 ## Using the Application
 
-Once the server is running:
-
-1. Open your browser and navigate to `http://localhost:8000`
-2. Click "Connect a Bank" button to launch Teller Connect
+1. Open your browser and navigate to the frontend URL
+2. Click "Connect Bank Account" on the dashboard to launch Teller Connect
 3. Follow the prompts to connect your bank account
-4. After connecting, you'll see your institutions listed
-5. Click on an institution to view accounts
-6. View and categorize transactions
-7. Export transactions to Google Sheets
+4. After connecting, you'll see your accounts and transactions
+5. Use the categories page to set up custom categories
+6. Set up auto-categorization rules for recurring transactions
+7. View your spending breakdown on the dashboard
+8. Export transactions to Google Sheets if needed
 
-## API Documentation
+## Development and Customization
+
+### Backend API Documentation
 
 FastAPI automatically generates interactive API documentation:
 
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-You can also access the OpenAPI specification directly:
+### Frontend Customization
 
-- JSON format: http://localhost:8000/api/openapi.json
-- YAML format: http://localhost:8000/api/openapi.yaml
+- Edit `tailwind.config.js` to customize the theme colors
+- Modify components in `src/components` to adjust the UI
+- Add new pages by creating Vue components in `src/views` and updating the router
 
-The OpenAPI specification can be used by other tools or LLMs to generate frontend clients.
+## Deployment
 
-## Deployment Options
+### Backend Deployment
 
-### Docker
+#### Using Docker
 
 A Dockerfile is not included in this version, but for containerization, you would:
 
-1. Create a Dockerfile
+1. Create a Dockerfile in the backend directory
 2. Build the Docker image
 3. Run with proper volume mounts for persistent storage
 
-### Hosting Providers
+#### Hosting Providers
 
-This app can be deployed to:
+The backend can be deployed to:
 
 - Heroku
 - DigitalOcean App Platform
@@ -174,59 +203,51 @@ This app can be deployed to:
 - Google Cloud Run
 - or any other Python application hosting service
 
-Remember to set all environment variables in your hosting provider's dashboard.
+### Frontend Deployment
 
-## API Endpoints
+Build the frontend for production:
 
-### Accounts and Transactions
+```bash
+cd frontend
+npm run build
+```
 
-- `GET /api/accounts` - List all accounts
-- `GET /api/accounts/{account_id}/transactions` - List transactions for an account
+The built files will be in the `dist` directory and can be served using any static file server.
 
-### Categories
+Popular hosting options for the frontend include:
 
-- `GET /api/categories` - List all categories
-- `POST /api/categories` - Create a new category
-- `PUT /api/categories/{category_id}` - Update a category
-- `DELETE /api/categories/{category_id}` - Delete a category
-
-### Transaction Mappings
-
-- `GET /api/mappings` - List all transaction mappings
-- `POST /api/mappings` - Create a new mapping
-- `DELETE /api/mappings/{pattern}` - Delete a mapping
-
-### Transaction Processing
-
-- `POST /api/transactions/categorize` - Auto-categorize transactions
-- `POST /api/transactions/export` - Export transactions to Google Sheets
-
-### Teller Token Management
-
-- `POST /api/teller/store-token` - Store a token from Teller Connect
-- `GET /api/teller/tokens` - List all stored Teller tokens
-- `DELETE /api/teller/tokens/{institution_name}` - Delete a token for a specific institution
+- Netlify
+- Vercel
+- GitHub Pages
+- Firebase Hosting
+- AWS S3 + CloudFront
 
 ## Security Considerations
 
 - The Teller client certificate is sensitive and should be kept secure
-- Google API credentials are also sensitive
+- Google API credentials should be protected
 - Environment variables should never be committed to version control
 - Always use HTTPS in production
+- Consider adding user authentication for multi-user environments
 
-## Local Development Tips
+## Teller API Integration Details
 
-- Use `DEBUG=True` in your .env file for development
-- You can use Teller's sandbox environment for testing
+### Sandbox Mode
 
-## Extending the Application
+For testing, you can use Teller's sandbox environment:
 
-This backend is designed to be modular and extensible:
+1. Set `VITE_TELLER_ENVIRONMENT=sandbox` in your frontend `.env` file
+2. Use the following credentials in Teller Connect:
+   - Username: `verify.microdeposit` or any other Teller sandbox username
+   - Password: `password`
 
-- Add authentication for multi-user support
-- Implement more sophisticated transaction categorization
-- Add budget tracking features
-- Create reporting and visualization endpoints
+### Production Mode
+
+For production:
+
+1. Set `VITE_TELLER_ENVIRONMENT=production` in your frontend `.env`
+2. Ensure you have valid Teller API certificates
+3. Update the backend `.env` file with your certificate paths
 
 ## License
 
