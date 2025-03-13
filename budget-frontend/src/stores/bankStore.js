@@ -39,6 +39,28 @@ export const useBankStore = defineStore("bank", {
       try {
         this.accounts = await apiService.listAccounts(institution);
         this.selectedInstitution = institution;
+
+        // Add institution info to accounts
+        this.accounts.forEach((account) => {
+          if (!account.institution) {
+            account.institution = {
+              name: institution,
+              id: this.institutions.find(
+                (inst) => inst.institution_name === institution
+              )?.institution_id,
+            };
+          }
+        });
+
+        // Update the all accounts cache if it exists
+        if (this._allAccounts) {
+          // Remove any existing accounts for this institution
+          this._allAccounts = this._allAccounts.filter(
+            (acc) => acc.institution?.name !== institution
+          );
+          // Add the new accounts
+          this._allAccounts = [...this._allAccounts, ...this.accounts];
+        }
       } catch (err) {
         this.error = err.message || "Failed to fetch accounts";
         console.error(this.error);

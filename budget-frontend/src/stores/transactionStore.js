@@ -107,35 +107,14 @@ export const useTransactionStore = defineStore("transaction", {
   },
 
   actions: {
-    async fetchTransactions(accountId, institution) {
-      this.loading = true;
-      this.error = null;
+    // Set loading state directly
+    setLoading(state) {
+      this.loading = state;
+    },
 
-      try {
-        const transactions = await apiService.listTransactions(
-          accountId,
-          institution
-        );
-        // If we're fetching for a specific account, we'll replace existing transactions
-        // for that account and keep transactions from other accounts
-        if (accountId) {
-          // Remove existing transactions for this account
-          this.transactions = this.transactions.filter(
-            (tx) => tx.account_id !== accountId
-          );
-          // Add the new transactions
-          this.transactions = [...this.transactions, ...transactions];
-        } else {
-          // If no account specified, just add the transactions (used when loading all)
-          this.transactions = [...this.transactions, ...transactions];
-        }
-        this.filteredTransactions = [...this.transactions];
-      } catch (err) {
-        this.error = err.message || "Failed to fetch transactions";
-        console.error(this.error);
-      } finally {
-        this.loading = false;
-      }
+    // Set error state directly
+    setError(message) {
+      this.error = message;
     },
 
     // Add transactions to the store (used when loading transactions from multiple accounts)

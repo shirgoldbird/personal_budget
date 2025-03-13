@@ -172,7 +172,7 @@ async function loadAllAccounts() {
   bankStore._allAccounts = [];
   
   if (bankStore.hasInstitutions) {
-    for (const institution of bankStore.institutions) {
+    const institutionPromises = bankStore.institutions.map(async (institution) => {
       try {
         const accounts = await apiService.listAccounts(institution.institution_name);
         
@@ -184,25 +184,45 @@ async function loadAllAccounts() {
               id: institution.institution_id
             };
           }
-          
-          // Try to get balance information
-          if (account.links && account.links.balances) {
-            apiService.getBalance(account.id, institution.institution_name)
-              .then(balanceInfo => {
-                account.balance = balanceInfo.available || balanceInfo.ledger;
-              })
-              .catch(() => {
-                account.balance = null;
-              });
-          }
         });
         
-        allAccounts.value = [...allAccounts.value, ...accounts];
-        bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
+        return accounts;
       } catch (err) {
         console.error(`Error loading accounts for ${institution.institution_name}:`, err);
         error.value = `Failed to load accounts for ${institution.institution_name}`;
+        return [];
       }
+    });
+    
+    try {
+      const accountsArrays = await Promise.all(institutionPromises);
+      const allAccountsList = accountsArrays.flat();
+      
+      // Now fetch balances for all accounts in parallel
+      const balancePromises = allAccountsList.map(async (account) => {
+        if (account.links && account.links.balances) {
+          try {
+            const institutionName = account.institution?.name;
+            if (institutionName) {
+              const balanceInfo = await apiService.getBalance(account.id, institutionName);
+              account.balance = balanceInfo.available || balanceInfo.ledger;
+            }
+          } catch (err) {
+            console.error(`Error loading balance for account ${account.id}:`, err);
+            // Don't set an error here, just log it
+            account.balance = null;
+          }
+        }
+        return account;
+      });
+      
+      const accountsWithBalances = await Promise.all(balancePromises);
+      
+      allAccounts.value = accountsWithBalances;
+      bankStore._allAccounts = accountsWithBalances;
+    } catch (err) {
+      console.error("Error loading accounts:", err);
+      error.value = "Failed to load accounts. Please try again.";
     }
   }
   

@@ -207,6 +207,7 @@ import { useBankStore } from '../../stores/bankStore';
 import { useTransactionStore } from '../../stores/transactionStore';
 import TellerConnect from '../accounts/TellerConnect.vue';
 import SpendingChart from './SpendingChart.vue';
+import { apiService } from '../../services/api';
 
 const router = useRouter();
 const bankStore = useBankStore();
@@ -274,43 +275,55 @@ onMounted(async () => {
   
   // Fetch all transactions if institutions are available
   if (bankStore.hasInstitutions) {
-    // Fetch all accounts first
-    const accountsPromises = bankStore.institutions.map(institution => 
-      apiService.listAccounts(institution.institution_name)
-        .then(accounts => {
-          // Store all accounts in the bankStore
-          accounts.forEach(account => {
-            account.institution = {
-              name: institution.institution_name,
-              id: institution.institution_id
-            };
-          });
-          
-          if (!bankStore._allAccounts) bankStore._allAccounts = [];
-          bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
-          
-          return accounts;
-        })
-    );
+    // Show loading state
+    transactionStore.setLoading(true);
     
     try {
-      const allAccountsArrays = await Promise.all(accountsPromises);
+      // Fetch all accounts first
+      const accountsPromises = bankStore.institutions.map(institution => 
+        apiService.listAccounts(institution.institution_name)
+          .then(accounts => {
+            // Store all accounts in the bankStore
+            accounts.forEach(account => {
+              account.institution = {
+                name: institution.institution_name,
+                id: institution.institution_id
+              };
+            });
+            
+            if (!bankStore._allAccounts) bankStore._allAccounts = [];
+            bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
+            
+            return accounts;
+          })
+      );
       
-      // Fetch transactions for all accounts
-      for (let i = 0; i < allAccountsArrays.length; i++) {
-        const accounts = allAccountsArrays[i];
-        const institution = bankStore.institutions[i];
-        
-        for (const account of accounts) {
-          const transactions = await apiService.listTransactions(
-            account.id, 
-            institution.institution_name
-          );
-          transactionStore.addTransactions(transactions);
+      const allAccountsArrays = await Promise.all(accountsPromises);
+      const allAccounts = allAccountsArrays.flat();
+      
+      // Fetch transactions for all accounts in parallel
+      const transactionPromises = allAccounts.map(account => {
+        const institutionName = account.institution?.name;
+        if (institutionName) {
+          return apiService.listTransactions(account.id, institutionName)
+            .then(transactions => {
+              transactionStore.addTransactions(transactions);
+              return transactions;
+            })
+            .catch(err => {
+              console.error(`Error fetching transactions for account ${account.id}:`, err);
+              return [];
+            });
         }
-      }
+        return Promise.resolve([]);
+      });
+      
+      await Promise.all(transactionPromises);
     } catch (error) {
       console.error("Error fetching accounts or transactions:", error);
+      transactionStore.setError("Failed to load some data. Please try refreshing.");
+    } finally {
+      transactionStore.setLoading(false);
     }
   }
 });

@@ -192,6 +192,7 @@ import { ref, computed, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router';
 import { useBankStore } from '../stores/bankStore';
 import { useTransactionStore } from '../stores/transactionStore';
+import { apiService } from '../services/api';
 
 const router = useRouter();
 const bankStore = useBankStore();
@@ -205,16 +206,53 @@ const selectedAccountId = ref('');
 // Get all transactions from all accounts
 async function fetchAllTransactions() {
   transactionStore.reset();
+  
   if (bankStore.hasInstitutions) {
-    for (const institution of bankStore.institutions) {
-      // First get all accounts for this institution
-      const accounts = await apiService.listAccounts(institution.institution_name);
-      
-      // Then fetch transactions for each account
-      for (const account of accounts) {
-        const transactions = await apiService.listTransactions(account.id, institution.institution_name);
-        transactionStore.addTransactions(transactions);
+    const errors = [];
+    
+    // First ensure we have all accounts loaded
+    if (!bankStore._allAccounts || bankStore._allAccounts.length === 0) {
+      // Load all accounts first
+      for (const institution of bankStore.institutions) {
+        try {
+          const accounts = await apiService.listAccounts(institution.institution_name);
+          
+          // Add institution info to each account
+          accounts.forEach(account => {
+            if (!account.institution) {
+              account.institution = {
+                name: institution.institution_name,
+                id: institution.institution_id
+              };
+            }
+          });
+          
+          if (!bankStore._allAccounts) bankStore._allAccounts = [];
+          bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
+        } catch (err) {
+          console.error(`Error loading accounts for ${institution.institution_name}:`, err);
+          errors.push(`Failed to load accounts for ${institution.institution_name}`);
+        }
       }
+    }
+    
+    // Then fetch transactions for each account
+    const allAccounts = bankStore._allAccounts;
+    for (const account of allAccounts) {
+      try {
+        const institutionName = account.institution?.name;
+        if (institutionName) {
+          const transactions = await apiService.listTransactions(account.id, institutionName);
+          transactionStore.addTransactions(transactions);
+        }
+      } catch (err) {
+        console.error(`Error loading transactions for account ${account.id}:`, err);
+        errors.push(`Failed to load transactions for account ${account.name}`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      transactionStore.setError(errors.join('. '));
     }
   }
 }
@@ -359,14 +397,25 @@ function handleClickOutside(event) {
 onMounted(async () => {
   await transactionStore.fetchCategories();
   
+  // Reset or initialize selectedAccountId based on store
+  if (bankStore.selectedAccount) {
+    selectedAccountId.value = bankStore.selectedAccount.id;
+  } else {
+    selectedAccountId.value = '';
+  }
+  
   if (bankStore.hasInstitutions) {
     if (bankStore.selectedAccount) {
       // If a specific account is selected, just load transactions for that account
-      selectedAccountId.value = bankStore.selectedAccount.id;
       await transactionStore.fetchTransactions(bankStore.selectedAccount.id, bankStore.selectedInstitution);
     } else {
       // Otherwise, load all transactions from all accounts
-      await fetchAllTransactions();
+      transactionStore.setLoading(true);
+      try {
+        await fetchAllTransactions();
+      } finally {
+        transactionStore.setLoading(false);
+      }
     }
   } else {
     router.push('/');
