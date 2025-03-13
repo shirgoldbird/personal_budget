@@ -201,9 +201,22 @@ export const useTransactionStore = defineStore("transaction", {
       // Update locally first for immediate UI feedback
       transaction.category = categoryName;
 
-      // Then send to API
+      // Get account name for the transaction
+      const account = this.getAccountById(transaction.account_id);
+      const accountName = account
+        ? `${account.institution?.name || "Unknown"} - ${account.name} (${
+            account.last_four
+          })`
+        : "Unknown Account";
+
+      // Then send to API with both account_id and account_name
       try {
-        await apiService.categorizeTransactions([transaction]);
+        const txWithAccountName = {
+          ...transaction,
+          account_name: accountName,
+        };
+
+        await apiService.categorizeTransactions([txWithAccountName]);
       } catch (err) {
         this.error = err.message || "Failed to categorize transaction";
         console.error(this.error);

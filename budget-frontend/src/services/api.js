@@ -54,8 +54,20 @@ export const apiService = {
   },
 
   async categorizeTransactions(transactions) {
+    // Make sure each transaction has an account_name field
+    const processedTransactions = transactions.map((tx) => {
+      if (!tx.account_name) {
+        // Add a default account_name if missing
+        return {
+          ...tx,
+          account_name: "Unknown Account",
+        };
+      }
+      return tx;
+    });
+
     const response = await api.post("/transactions/categorize", {
-      transactions,
+      transactions: processedTransactions,
     });
     return response.data;
   },
