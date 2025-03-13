@@ -3,3 +3,5 @@ venv/*
 *.pem
 creds/*
 *.pyc
+categories.json
+transaction_mappings.json
