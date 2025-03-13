@@ -1,0 +1,13 @@
+components:
+  securitySchemes:
+    TellerToken:
+      description: Teller access token or specify institution parameter
+      in: header
+      name: X-Teller-Token
+      type: apiKey
+info:
+  description: API for personal budgeting with Teller integration
+  title: Personal Budget Tracker API
+  version: 1.0.0
+openapi: 3.1.0
+paths: {}

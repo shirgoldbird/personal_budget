@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.utils import get_openapi
 from pathlib import Path
 from pydantic import BaseModel, Field
 import requests
@@ -13,13 +14,31 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import uuid
 import uvicorn
+import yaml
 from teller_token_manager import TellerTokenManager
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(title="Personal Budgeting API", 
               description="API for personal budgeting with Teller integration")
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title="Simple Budget API",
+        version="1.0.0",
+        description="API for a simple budgeting app",
+        routes=app.routes,
+    )
+        
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # Enable CORS
 app.add_middleware(
@@ -50,6 +69,81 @@ templates_dir = Path(Config.HTML_TEMPLATE_DIR)
 static_dir.mkdir(exist_ok=True)
 templates_dir.mkdir(exist_ok=True)
 
+# Custom OpenAPI schema
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title="Personal Budget Tracker API",
+        version="1.0.0",
+        description="API for personal budgeting with Teller integration",
+        routes=app.routes,
+    )
+    
+    # Add info about API security
+    openapi_schema["components"]["securitySchemes"] = {
+        "TellerToken": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Teller-Token",
+            "description": "Teller access token or specify institution parameter"
+        }
+    }
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+# Generate OpenAPI spec file
+@app.get("/api/openapi.json", include_in_schema=False)
+async def get_openapi_schema():
+    return JSONResponse(content=app.openapi())
+
+@app.get("/api/openapi.yaml", include_in_schema=False)
+async def get_openapi_yaml():
+    schema = app.openapi()
+    yaml_content = yaml.dump(schema)
+    return HTMLResponse(content=yaml_content, media_type="text/yaml")
+
+# Save OpenAPI spec to file system
+def save_openapi_spec():
+    # Ensure the app has been initialized
+    schema = get_openapi(
+        title="Personal Budget Tracker API",
+        version="1.0.0",
+        description="API for personal budgeting with Teller integration",
+        routes=app.routes,
+    )
+    
+    # Add security schemes
+    if "components" not in schema:
+        schema["components"] = {}
+    schema["components"]["securitySchemes"] = {
+        "TellerToken": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Teller-Token",
+            "description": "Teller access token or specify institution parameter"
+        }
+    }
+    
+    # Save JSON spec
+    json_path = static_dir / "openapi.json"
+    with open(json_path, "w") as f:
+        json.dump(schema, f, indent=2)
+    print(f"✓ Saved OpenAPI JSON spec to {json_path}")
+    
+    # Save YAML spec
+    try:
+        yaml_path = static_dir / "openapi.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.dump(schema, f)
+        print(f"✓ Saved OpenAPI YAML spec to {yaml_path}")
+    except ImportError:
+        print("✗ PyYAML not installed - skipping YAML export")
+
 # Copy the frontend files to the static directory if they don't exist
 def setup_static_files():
     # JavaScript file
@@ -65,6 +159,8 @@ def setup_static_files():
         example_html = Path("index.html.example")
         if example_html.exists():
             html_file.write_text(example_html.read_text())
+
+    save_openapi_spec()
 
 setup_static_files()
 

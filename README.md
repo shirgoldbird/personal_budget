@@ -1,13 +1,19 @@
 # Personal Budgeting Backend
 
-A simple and efficient backend for a personal budgeting application that connects to your bank accounts through Teller API, allows transaction categorization, and exports to Google Sheets.
+A simple and efficient FastAPI backend for a personal budgeting application that connects to your bank accounts through Teller API, allows transaction categorization, and exports to Google Sheets.
 
 ## Features
 
 - Secure connection to bank accounts via Teller API
+- Integration with Teller Connect for user authentication
+- Management of multiple bank connection tokens
 - Auto-categorization of transactions based on description patterns
 - Custom transaction categories with color coding
 - Export of transactions to Google Sheets
+- Modern FastAPI backend with automatic OpenAPI documentation
+- Simple web interface to connect to banks and manage transactions
+- OpenAPI specification in JSON and YAML formats
+- Type validation with Pydantic models
 - RESTful API for future frontend integration
 
 ## Prerequisites
@@ -15,18 +21,7 @@ A simple and efficient backend for a personal budgeting application that connect
 - Python 3.8 or higher
 - A Teller API account with certificates (for production use)
 - A Google Cloud Platform account with Sheets API enabled
-- A Google Sheet set up and shared with the GCP service account
-
-### Set up Teller
-
-Sign up at https://teller.io/ and save the downloaded credentials.
-
-### Set up Google Sheets
-
-1. Create a Google Cloud Platform project
-2. Enable the Google Sheets API
-3. Create a service account and download the credentials JSON file
-4. Create a Google Sheet and share it with the service account email
+- A Google Sheet set up with a "Transactions" tab
 
 ## Installation
 
@@ -55,15 +50,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
-
-Copy the example environment file:
+### 4. Run the setup script
 
 ```bash
-cp .env.example .env
+python setup.py
 ```
 
-Edit the `.env` file with your configuration. We recommend creating a `creds/` directory to store the various files (anything in there will be automatically git ignored).
+This will create the required directories and copy example files to their proper locations.
+
+### 5. Configure environment variables
+
+Edit the `.env` file with your configuration:
 
 ```
 # Teller API Configuration
@@ -76,8 +73,15 @@ GOOGLE_SHEET_ID=your_sheet_id_here
 GOOGLE_CREDS_PATH=path/to/google_credentials.json
 
 # App Configuration
-PORT=5000
+PORT=8000
 DEBUG=False
+
+# File paths
+CATEGORIES_FILE=categories.json
+TRANSACTION_MAPPING_FILE=transaction_mappings.json
+CREDS_DIR=creds
+STATIC_DIR=static
+HTML_TEMPLATE_DIR=templates
 ```
 
 ### 5. Set up categories and transaction mappings
@@ -88,6 +92,22 @@ Create initial category and mapping files:
 cp categories.json.example categories.json
 cp transaction_mappings.json.example transaction_mappings.json
 ```
+
+### 6. Set up Google Sheets
+
+1. Create a Google Cloud Platform project
+2. Enable the Google Sheets API
+3. Create a service account and download the credentials JSON file
+4. Create a Google Sheet and share it with the service account email
+5. Set up a sheet named "Transactions" with these columns:
+   - Transaction ID
+   - Date
+   - Account ID
+   - Description
+   - Amount
+   - Category
+   - Notes
+   - Timestamp
 
 ## Running the application
 
@@ -102,6 +122,18 @@ python app.py
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
+## Using the Application
+
+Once the server is running:
+
+1. Open your browser and navigate to `http://localhost:8000`
+2. Click "Connect a Bank" button to launch Teller Connect
+3. Follow the prompts to connect your bank account
+4. After connecting, you'll see your institutions listed
+5. Click on an institution to view accounts
+6. View and categorize transactions
+7. Export transactions to Google Sheets
+
 ## API Documentation
 
 FastAPI automatically generates interactive API documentation:
@@ -109,7 +141,12 @@ FastAPI automatically generates interactive API documentation:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-You can use these interfaces to explore and test the API endpoints.
+You can also access the OpenAPI specification directly:
+
+- JSON format: http://localhost:8000/api/openapi.json
+- YAML format: http://localhost:8000/api/openapi.yaml
+
+The OpenAPI specification can be used by other tools or LLMs to generate frontend clients.
 
 ## Deployment Options
 
@@ -157,6 +194,12 @@ Remember to set all environment variables in your hosting provider's dashboard.
 
 - `POST /api/transactions/categorize` - Auto-categorize transactions
 - `POST /api/transactions/export` - Export transactions to Google Sheets
+
+### Teller Token Management
+
+- `POST /api/teller/store-token` - Store a token from Teller Connect
+- `GET /api/teller/tokens` - List all stored Teller tokens
+- `DELETE /api/teller/tokens/{institution_name}` - Delete a token for a specific institution
 
 ## Security Considerations
 

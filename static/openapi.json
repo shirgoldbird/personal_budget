@@ -1,0 +1,19 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Personal Budget Tracker API",
+    "description": "API for personal budgeting with Teller integration",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "securitySchemes": {
+      "TellerToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Teller-Token",
+        "description": "Teller access token or specify institution parameter"
+      }
+    }
+  }
+}
