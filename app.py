@@ -263,18 +263,20 @@ class GoogleSheetsClient:
             self._ensure_transactions_sheet()
 
     def _ensure_transactions_sheet(self):
-        """Ensures the Transactions sheet exists with proper headers"""
+        """Ensures the Transactions sheet exists with proper headers and returns the sheet ID"""
         if not self.creds or not self.sheet_id:
-            return
+            return None
             
         try:
             # Check if sheet exists
             metadata = self.sheet.get(spreadsheetId=self.sheet_id).execute()
             sheet_exists = False
+            sheet_id = None
             
             for sheet in metadata.get('sheets', []):
                 if sheet.get('properties', {}).get('title') == 'Transactions':
                     sheet_exists = True
+                    sheet_id = sheet.get('properties', {}).get('sheetId')
                     break
             
             # If sheet doesn't exist, create it
@@ -292,13 +294,16 @@ class GoogleSheetsClient:
                 }
                 
                 body = {'requests': [request]}
-                self.sheet.batchUpdate(spreadsheetId=self.sheet_id, body=body).execute()
+                response = self.sheet.batchUpdate(spreadsheetId=self.sheet_id, body=body).execute()
+                
+                # Get the sheet ID from the response
+                sheet_id = response.get('replies', [{}])[0].get('addSheet', {}).get('properties', {}).get('sheetId')
                 print("Created 'Transactions' sheet")
             
             # Check if headers exist
             result = self.sheet.values().get(
                 spreadsheetId=self.sheet_id,
-                range='Transactions!A1:H1'
+                range='Transactions!A1:I1'
             ).execute()
             
             headers = result.get('values', [[]])[0] if 'values' in result else []
@@ -320,44 +325,176 @@ class GoogleSheetsClient:
                     body=body
                 ).execute()
                 print("Added headers to Transactions sheet")
+            
+            return sheet_id
                 
         except Exception as e:
             print(f"Error setting up Google Sheet: {e}")
+            return None
+
+    def _get_existing_transactions(self):
+        """Retrieve all existing transaction IDs and their row numbers"""
+        if not self.creds or not self.sheet_id:
+            return {}
+            
+        try:
+            # Get all data from the sheet
+            result = self.sheet.values().get(
+                spreadsheetId=self.sheet_id,
+                range='Transactions!A:I'
+            ).execute()
+            
+            values = result.get('values', [])
+            if not values or len(values) <= 1:  # Only headers or empty
+                return {}
+                
+            # Create a map of transaction IDs to row numbers (0-based index)
+            # Skip the header row (index 0)
+            tx_map = {}
+            for i, row in enumerate(values[1:], 1):  # Start from row 1 (after header)
+                if row and len(row) > 0:
+                    tx_id = row[0]  # Transaction ID is in the first column
+                    tx_map[tx_id] = i
+                    
+            return tx_map
+                
+        except Exception as e:
+            print(f"Error retrieving existing transactions: {e}")
+            return {}
 
     def append_transactions(self, transactions):
+        """
+        Add transactions to the Google Sheet.
+        - Adds new transactions at the top of the sheet (after the header)
+        - Detects and updates existing transactions
+        - Skips unchanged transactions
+        """
         if not self.creds or not self.sheet_id:
             return {'error': 'Google Sheets credentials or Sheet ID not configured'}
         
-        # Ensure sheet is set up before appending
-        self._ensure_transactions_sheet()
+        # Ensure sheet is set up before proceeding and get the sheet ID
+        sheet_id = self._ensure_transactions_sheet()
+        if not sheet_id:
+            return {'error': 'Could not get or create Transactions sheet'}
         
-        values = []
+        # Get existing transaction IDs and their row numbers
+        existing_transactions = self._get_existing_transactions()
+        
+        # Separate transactions into new and existing
+        new_transactions = []
+        updates = []
+        
         for tx in transactions:
-            values.append([
+            # Format the transaction data
+            tx_data = [
                 tx.id,
                 tx.account_id,
                 tx.date,
                 tx.account_name,
                 tx.description,
                 tx.amount,
-                tx.category,
+                tx.category or '',
                 tx.notes or '',
                 datetime.now().isoformat()
-            ])
+            ]
+            
+            if tx.id in existing_transactions:
+                # Get current row data to compare
+                row_num = existing_transactions[tx.id]
+                row_range = f'Transactions!A{row_num+1}:I{row_num+1}'  # +1 because sheets are 1-indexed
+                
+                try:
+                    # Get the current row data
+                    current_data_result = self.sheet.values().get(
+                        spreadsheetId=self.sheet_id,
+                        range=row_range
+                    ).execute()
+                    
+                    current_data = current_data_result.get('values', [[]])[0]
+                    
+                    # Check if the transaction has changed (ignore timestamp)
+                    # Compare first 8 columns (everything except timestamp)
+                    changed = False
+                    for i in range(min(len(current_data), 8)):
+                        if i < len(tx_data) and str(current_data[i]) != str(tx_data[i]):
+                            changed = True
+                            break
+                    
+                    if changed:
+                        # Update the existing row
+                        updates.append({
+                            'range': row_range,
+                            'values': [tx_data]
+                        })
+                except Exception as e:
+                    print(f"Error checking existing transaction {tx.id}: {e}")
+                    # Add to new transactions as fallback
+                    new_transactions.append(tx_data)
+            else:
+                # New transaction
+                new_transactions.append(tx_data)
         
-        body = {
-            'values': values
-        }
+        results = {}
         
-        result = self.sheet.values().append(
-            spreadsheetId=self.sheet_id,
-            range='Transactions!A:I',
-            valueInputOption='RAW',
-            insertDataOption='INSERT_ROWS',
-            body=body
-        ).execute()
+        # Process updates for existing transactions
+        if updates:
+            try:
+                update_body = {
+                    'valueInputOption': 'RAW',
+                    'data': updates
+                }
+                update_result = self.sheet.values().batchUpdate(
+                    spreadsheetId=self.sheet_id,
+                    body=update_body
+                ).execute()
+                results['updated'] = len(updates)
+            except Exception as e:
+                print(f"Error updating existing transactions: {e}")
+                results['update_error'] = str(e)
         
-        return result
+        # Insert new transactions at the top (after header row)
+        if new_transactions:
+            try:
+                # Insert rows after header
+                insert_body = {
+                    'requests': [{
+                        'insertRange': {
+                            'range': {
+                                'sheetId': sheet_id,  # Using the actual sheet ID
+                                'startRowIndex': 1,  # After header row
+                                'endRowIndex': 1 + len(new_transactions),
+                                'startColumnIndex': 0,
+                                'endColumnIndex': 9  # 9 columns
+                            },
+                            'shiftDimension': 'ROWS'
+                        }
+                    }]
+                }
+                
+                # First, insert the rows
+                self.sheet.batchUpdate(
+                    spreadsheetId=self.sheet_id,
+                    body=insert_body
+                ).execute()
+                
+                # Then, populate the inserted rows with data
+                populate_body = {
+                    'values': new_transactions
+                }
+                
+                insert_result = self.sheet.values().update(
+                    spreadsheetId=self.sheet_id,
+                    range='Transactions!A2',  # Start after header
+                    valueInputOption='RAW',
+                    body=populate_body
+                ).execute()
+                
+                results['inserted'] = len(new_transactions)
+            except Exception as e:
+                print(f"Error inserting new transactions: {e}")
+                results['insert_error'] = str(e)
+        
+        return results
 
 # Category Manager
 class CategoryManager:
