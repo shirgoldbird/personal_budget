@@ -185,6 +185,7 @@ class Transaction(BaseModel):
     id: str
     date: str
     account_id: str
+    account_name: str
     description: str
     amount: str
     category: Optional[str] = None
@@ -302,7 +303,7 @@ class GoogleSheetsClient:
             
             headers = result.get('values', [[]])[0] if 'values' in result else []
             expected_headers = [
-                'Transaction ID', 'Date', 'Account ID', 'Description', 
+                'Transaction ID', 'Account ID', 'Date', 'Account Name', 'Description', 
                 'Amount', 'Category', 'Notes', 'Timestamp'
             ]
             
@@ -314,7 +315,7 @@ class GoogleSheetsClient:
                 
                 self.sheet.values().update(
                     spreadsheetId=self.sheet_id,
-                    range='Transactions!A1:H1',
+                    range='Transactions!A1:I1',
                     valueInputOption='RAW',
                     body=body
                 ).execute()
@@ -334,8 +335,9 @@ class GoogleSheetsClient:
         for tx in transactions:
             values.append([
                 tx.id,
-                tx.date,
                 tx.account_id,
+                tx.date,
+                tx.account_name,
                 tx.description,
                 tx.amount,
                 tx.category,
@@ -349,7 +351,7 @@ class GoogleSheetsClient:
         
         result = self.sheet.values().append(
             spreadsheetId=self.sheet_id,
-            range='Transactions!A:H',
+            range='Transactions!A:I',
             valueInputOption='RAW',
             insertDataOption='INSERT_ROWS',
             body=body
@@ -526,8 +528,9 @@ async def list_transactions(
             # Convert dict to Transaction model and back for categorization
             tx_model = Transaction(
                 id=tx.get('id', ''),
-                date=tx.get('date', ''),
                 account_id=tx.get('account_id', ''),
+                date=tx.get('date', ''),
+                account_name=tx.get('account_name', ''),
                 description=tx.get('description', ''),
                 amount=tx.get('amount', '')
             )

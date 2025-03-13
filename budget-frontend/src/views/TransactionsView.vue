@@ -379,15 +379,24 @@ function getCategoryClasses(categoryName) {
 // Export transactions to Google Sheets
 async function exportTransactions() {
   try {
-    const transactionsToExport = filteredTransactions.value.map(tx => ({
-      id: tx.id,
-      date: tx.date,
-      account_id: tx.account_id,
-      description: tx.description,
-      amount: tx.amount,
-      category: tx.category || 'Uncategorized',
-      notes: tx.notes || ''
-    }));
+    const transactionsToExport = filteredTransactions.value.map(tx => {
+      // Get account name instead of just the ID
+      const account = getAllAccounts().find(acc => acc.id === tx.account_id);
+      const accountName = account 
+        ? `${account.institution?.name || 'Unknown'} - ${account.name} (${account.last_four})`
+        : 'Unknown Account';
+      
+      return {
+        id: tx.id,
+        date: tx.date,
+        account_id: tx.account_id, // Keep account_id as required by the backend
+        account_name: accountName, // Add account name as an additional field
+        description: tx.description,
+        amount: tx.amount,
+        category: tx.category || 'Uncategorized',
+        notes: tx.notes || ''
+      };
+    });
     
     await apiService.exportTransactions({ 
       transactions: transactionsToExport

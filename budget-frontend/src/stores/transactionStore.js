@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { apiService } from "../services/api";
+import { useBankStore } from "./bankStore";
 
 export const useTransactionStore = defineStore("transaction", {
   state: () => ({
@@ -217,15 +218,26 @@ export const useTransactionStore = defineStore("transaction", {
       try {
         // Format transactions for export
         const formattedTransactions = this.currentMonthTransactions.map(
-          (tx) => ({
-            id: tx.id,
-            date: tx.date,
-            account_id: tx.account_id,
-            description: tx.description,
-            amount: tx.amount,
-            category: tx.category || "Uncategorized",
-            notes: tx.notes || "",
-          })
+          (tx) => {
+            // Get account information from bank store
+            const account = this.getAccountById(tx.account_id);
+            const accountName = account
+              ? `${account.institution?.name || "Unknown"} - ${account.name} (${
+                  account.last_four
+                })`
+              : "Unknown Account";
+
+            return {
+              id: tx.id,
+              date: tx.date,
+              account_id: tx.account_id, // Keep the required account_id field
+              account_name: accountName, // Add account name as additional field
+              description: tx.description,
+              amount: tx.amount,
+              category: tx.category || "Uncategorized",
+              notes: tx.notes || "",
+            };
+          }
         );
 
         // The API expects an object with a transactions property that is an array
@@ -241,6 +253,15 @@ export const useTransactionStore = defineStore("transaction", {
       } finally {
         this.loading = false;
       }
+    },
+
+    // Helper to get account information from bank store
+    getAccountById(accountId) {
+      const bankStore = useBankStore();
+      if (bankStore._allAccounts) {
+        return bankStore._allAccounts.find((acc) => acc.id === accountId);
+      }
+      return null;
     },
 
     setMonth(month, year) {
