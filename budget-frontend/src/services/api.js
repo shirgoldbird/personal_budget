@@ -36,6 +36,14 @@ export const apiService = {
     return response.data;
   },
 
+  async getBalance(accountId, institution) {
+    const params = institution ? { institution } : {};
+    const response = await api.get(`/accounts/${accountId}/balances`, {
+      params,
+    });
+    return response.data;
+  },
+
   // Transactions
   async listTransactions(accountId, institution) {
     const params = institution ? { institution } : {};

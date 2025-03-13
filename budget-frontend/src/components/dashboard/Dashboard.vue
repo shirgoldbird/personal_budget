@@ -96,24 +96,44 @@
 
       <!-- Connected banks -->
       <div class="card mb-8">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">Connected Banks</h3>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-medium text-gray-900">Connected Banks</h3>
+          <router-link to="/accounts" class="text-primary-600 hover:text-primary-800 text-sm font-medium">
+            View All Accounts
+          </router-link>
+        </div>
+        
         <div class="space-y-4">
           <div v-for="institution in bankStore.institutions" :key="institution.institution_name" 
-               class="flex items-center justify-between border-b border-gray-200 pb-4 last:border-0 last:pb-0">
-            <div>
-              <h4 class="font-medium">{{ institution.institution_name }}</h4>
-              <p class="text-sm text-gray-500">Connected: {{ new Date(institution.created_at).toLocaleDateString() }}</p>
+               class="border-b border-gray-200 pb-4 last:border-0 last:pb-0">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="font-medium text-gray-900">{{ institution.institution_name }}</h4>
+              <div class="flex space-x-2">
+                <button @click="viewAccounts(institution.institution_name)" class="btn btn-primary text-sm">
+                  View Accounts
+                </button>
+                <button @click="disconnectBank(institution.institution_name)" class="btn btn-danger text-sm">
+                  Disconnect
+                </button>
+              </div>
             </div>
-            <div class="flex space-x-2">
-              <button @click="viewAccounts(institution.institution_name)" class="btn btn-primary text-sm">
-                View Accounts
-              </button>
-              <button @click="disconnectBank(institution.institution_name)" class="btn btn-danger text-sm">
-                Disconnect
-              </button>
+            
+            <!-- Show account summary -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+              <div v-for="account in getTopAccountsForInstitution(institution.institution_name, 3)" 
+                   :key="account.id"
+                   class="text-sm bg-gray-50 p-2 rounded">
+                <div class="font-medium">{{ account.name }}</div>
+                <div class="text-gray-500">Ending in {{ account.last_four }}</div>
+              </div>
+              <div v-if="getAccountsForInstitution(institution.institution_name).length > 3"
+                   class="text-sm text-primary-600 flex items-center justify-center">
+                +{{ getAccountsForInstitution(institution.institution_name).length - 3 }} more accounts
+              </div>
             </div>
           </div>
         </div>
+        
         <div class="mt-4 pt-4 border-t border-gray-200">
           <TellerConnect />
         </div>
@@ -211,8 +231,22 @@ function getCategoryColor(categoryName) {
 
 // Function to view accounts for a specific institution
 function viewAccounts(institutionName) {
-  bankStore.fetchAccounts(institutionName);
+  bankStore.selectedInstitution = institutionName;
   router.push('/accounts');
+}
+
+// Helper function to get accounts by institution
+function getAccountsForInstitution(institutionName) {
+  if (!bankStore._allAccounts) return [];
+  return bankStore._allAccounts.filter(
+    account => account.institution?.name === institutionName
+  );
+}
+
+// Helper function to get a limited number of accounts for an institution
+function getTopAccountsForInstitution(institutionName, limit) {
+  const accounts = getAccountsForInstitution(institutionName);
+  return accounts.slice(0, limit);
 }
 
 // Function to disconnect a bank
@@ -237,5 +271,47 @@ onMounted(async () => {
   await bankStore.fetchInstitutions();
   await transactionStore.fetchCategories();
   await transactionStore.fetchCategoryMappings();
+  
+  // Fetch all transactions if institutions are available
+  if (bankStore.hasInstitutions) {
+    // Fetch all accounts first
+    const accountsPromises = bankStore.institutions.map(institution => 
+      apiService.listAccounts(institution.institution_name)
+        .then(accounts => {
+          // Store all accounts in the bankStore
+          accounts.forEach(account => {
+            account.institution = {
+              name: institution.institution_name,
+              id: institution.institution_id
+            };
+          });
+          
+          if (!bankStore._allAccounts) bankStore._allAccounts = [];
+          bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
+          
+          return accounts;
+        })
+    );
+    
+    try {
+      const allAccountsArrays = await Promise.all(accountsPromises);
+      
+      // Fetch transactions for all accounts
+      for (let i = 0; i < allAccountsArrays.length; i++) {
+        const accounts = allAccountsArrays[i];
+        const institution = bankStore.institutions[i];
+        
+        for (const account of accounts) {
+          const transactions = await apiService.listTransactions(
+            account.id, 
+            institution.institution_name
+          );
+          transactionStore.addTransactions(transactions);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching accounts or transactions:", error);
+    }
+  }
 });
 </script>

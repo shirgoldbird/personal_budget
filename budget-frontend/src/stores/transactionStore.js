@@ -116,14 +116,43 @@ export const useTransactionStore = defineStore("transaction", {
           accountId,
           institution
         );
-        this.transactions = transactions;
-        this.filteredTransactions = [...transactions];
+        // If we're fetching for a specific account, we'll replace existing transactions
+        // for that account and keep transactions from other accounts
+        if (accountId) {
+          // Remove existing transactions for this account
+          this.transactions = this.transactions.filter(
+            (tx) => tx.account_id !== accountId
+          );
+          // Add the new transactions
+          this.transactions = [...this.transactions, ...transactions];
+        } else {
+          // If no account specified, just add the transactions (used when loading all)
+          this.transactions = [...this.transactions, ...transactions];
+        }
+        this.filteredTransactions = [...this.transactions];
       } catch (err) {
         this.error = err.message || "Failed to fetch transactions";
         console.error(this.error);
       } finally {
         this.loading = false;
       }
+    },
+
+    // Add transactions to the store (used when loading transactions from multiple accounts)
+    addTransactions(transactions) {
+      if (!transactions || !transactions.length) return;
+
+      // Get the account ID from the first transaction
+      const accountId = transactions[0].account_id;
+
+      // Remove existing transactions for this account
+      this.transactions = this.transactions.filter(
+        (tx) => tx.account_id !== accountId
+      );
+
+      // Add the new transactions
+      this.transactions = [...this.transactions, ...transactions];
+      this.filteredTransactions = [...this.transactions];
     },
 
     async fetchCategories() {

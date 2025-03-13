@@ -2,19 +2,22 @@
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex justify-between items-center mb-8">
       <h1 class="text-2xl font-bold text-gray-900">Accounts</h1>
-      <router-link to="/" class="btn btn-outline">
-        Back to Dashboard
-      </router-link>
+      <div>
+        <router-link to="/" class="btn btn-outline mr-2">
+          Back to Dashboard
+        </router-link>
+        <TellerConnect />
+      </div>
     </div>
     
     <!-- Loading state -->
-    <div v-if="bankStore.loading" class="text-center py-12">
+    <div v-if="loading" class="text-center py-12">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
       <p class="mt-4 text-gray-600">Loading accounts...</p>
     </div>
 
     <!-- Error message -->
-    <div v-else-if="bankStore.error" class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+    <div v-else-if="error" class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
       <div class="flex">
         <div class="flex-shrink-0">
           <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -23,62 +26,68 @@
         </div>
         <div class="ml-3">
           <p class="text-sm text-red-700">
-            {{ bankStore.error }}
+            {{ error }}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- No accounts selected yet -->
-    <div v-else-if="!bankStore.selectedInstitution" class="bg-white shadow rounded-lg p-6 text-center">
+    <!-- No accounts connected yet -->
+    <div v-else-if="!bankStore.hasInstitutions" class="bg-white shadow rounded-lg p-6 text-center">
       <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
       </svg>
-      <h3 class="mt-2 text-lg font-medium text-gray-900">No institution selected</h3>
-      <p class="mt-1 text-gray-500">Please select an institution from the dashboard</p>
+      <h3 class="mt-2 text-lg font-medium text-gray-900">No bank accounts connected</h3>
+      <p class="mt-1 text-gray-500">Connect your bank accounts to start tracking your spending</p>
       <div class="mt-6">
-        <router-link to="/" class="btn btn-primary">
-          Go to Dashboard
-        </router-link>
+        <TellerConnect />
       </div>
     </div>
 
-    <!-- Account list -->
+    <!-- Account list grouped by institution -->
     <div v-else>
-      <h2 class="text-xl font-semibold text-gray-900 mb-6">
-        {{ bankStore.selectedInstitution }} Accounts
-      </h2>
-      
-      <div v-if="!bankStore.hasAccounts" class="bg-white shadow rounded-lg p-6 text-center">
-        <p class="text-gray-500">No accounts found for this institution</p>
-      </div>
-      
-      <div v-else class="grid grid-cols-1 gap-6">
-        <div v-for="account in bankStore.accounts" :key="account.id" class="bg-white shadow rounded-lg overflow-hidden">
-          <div class="px-6 py-5 border-b border-gray-200">
-            <div class="flex justify-between items-center">
-              <h3 class="text-lg font-medium text-gray-900">{{ account.name }}</h3>
-              <span class="px-2 py-1 rounded-full text-xs font-medium" 
-                   :class="getAccountTypeClasses(account.type, account.subtype)">
-                {{ formatAccountType(account.type, account.subtype) }}
-              </span>
-            </div>
-            <p class="text-sm text-gray-500 mt-1">
-              Account ending in {{ account.last_four }}
-            </p>
-          </div>
-          
-          <div class="px-6 py-5 flex justify-between items-center bg-gray-50">
-            <div>
-              <p class="text-sm text-gray-500">Balance</p>
-              <p class="text-xl font-semibold text-gray-900">
-                {{ account.currency }} •••• 
+      <div v-for="institution in bankStore.institutions" :key="institution.institution_name" class="mb-8">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-semibold text-gray-900">
+            {{ institution.institution_name }}
+          </h2>
+          <button @click="disconnectBank(institution.institution_name)" class="btn btn-danger btn-sm">
+            Disconnect
+          </button>
+        </div>
+        
+        <div v-if="!getAccountsForInstitution(institution.institution_name).length" class="bg-white shadow rounded-lg p-6 text-center">
+          <p class="text-gray-500">No accounts found for this institution</p>
+        </div>
+        
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div v-for="account in getAccountsForInstitution(institution.institution_name)" :key="account.id" 
+               class="bg-white shadow rounded-lg overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200">
+              <div class="flex justify-between items-center">
+                <h3 class="text-lg font-medium text-gray-900">{{ account.name }}</h3>
+                <span class="px-2 py-1 rounded-full text-xs font-medium" 
+                     :class="getAccountTypeClasses(account.type, account.subtype)">
+                  {{ formatAccountType(account.type, account.subtype) }}
+                </span>
+              </div>
+              <p class="text-sm text-gray-500 mt-1">
+                Account ending in {{ account.last_four }}
               </p>
             </div>
-            <div>
-              <button @click="viewTransactions(account)" class="btn btn-primary text-sm">
-                View Transactions
-              </button>
+            
+            <div class="px-6 py-5 flex justify-between items-center bg-gray-50">
+              <div>
+                <p class="text-sm text-gray-500">Balance</p>
+                <p class="text-xl font-semibold text-gray-900">
+                  {{ account.currency }} {{ account.balance || '••••' }}
+                </p>
+              </div>
+              <div>
+                <button @click="viewTransactions(account, institution.institution_name)" class="btn btn-primary text-sm">
+                  View Transactions
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -88,14 +97,19 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBankStore } from '../stores/bankStore';
 import { useTransactionStore } from '../stores/transactionStore';
+import TellerConnect from '../components/accounts/TellerConnect.vue';
+import { apiService } from '../services/api';
 
 const router = useRouter();
 const bankStore = useBankStore();
 const transactionStore = useTransactionStore();
+const allAccounts = ref([]);
+const loading = ref(false);
+const error = ref(null);
 
 // Format account type and subtype for display
 function formatAccountType(type, subtype) {
@@ -127,27 +141,76 @@ function getAccountTypeClasses(type, subtype) {
   return `${baseClasses} bg-gray-500 text-gray-800`;
 }
 
+// Function to get accounts for a specific institution
+function getAccountsForInstitution(institutionName) {
+  return allAccounts.value.filter(account => 
+    account.institution && account.institution.name === institutionName
+  );
+}
+
 // Function to view transactions for a specific account
-function viewTransactions(account) {
+async function viewTransactions(account, institutionName) {
   bankStore.selectAccount(account);
-  transactionStore.fetchTransactions(account.id, bankStore.selectedInstitution);
+  bankStore.selectedInstitution = institutionName;
+  await transactionStore.fetchTransactions(account.id, institutionName);
   router.push('/transactions');
 }
 
-onMounted(() => {
-  // If no institution is selected, redirect to dashboard
-  if (!bankStore.selectedInstitution && bankStore.hasInstitutions) {
-    router.push('/');
+// Function to disconnect a bank
+async function disconnectBank(institutionName) {
+  if (confirm(`Are you sure you want to disconnect ${institutionName}?`)) {
+    await bankStore.disconnectInstitution(institutionName);
+    await loadAllAccounts();
   }
-});
+}
 
-// Watch for changes in selectedInstitution
-watch(
-  () => bankStore.selectedInstitution,
-  (newValue) => {
-    if (newValue) {
-      bankStore.fetchAccounts(newValue);
+// Load all accounts from all institutions
+async function loadAllAccounts() {
+  loading.value = true;
+  error.value = null;
+  allAccounts.value = [];
+  bankStore._allAccounts = [];
+  
+  if (bankStore.hasInstitutions) {
+    for (const institution of bankStore.institutions) {
+      try {
+        const accounts = await apiService.listAccounts(institution.institution_name);
+        
+        // Add institution info to each account if not already present
+        accounts.forEach(account => {
+          if (!account.institution) {
+            account.institution = {
+              name: institution.institution_name,
+              id: institution.institution_id
+            };
+          }
+          
+          // Try to get balance information
+          if (account.links && account.links.balances) {
+            apiService.getBalance(account.id, institution.institution_name)
+              .then(balanceInfo => {
+                account.balance = balanceInfo.available || balanceInfo.ledger;
+              })
+              .catch(() => {
+                account.balance = null;
+              });
+          }
+        });
+        
+        allAccounts.value = [...allAccounts.value, ...accounts];
+        bankStore._allAccounts = [...bankStore._allAccounts, ...accounts];
+      } catch (err) {
+        console.error(`Error loading accounts for ${institution.institution_name}:`, err);
+        error.value = `Failed to load accounts for ${institution.institution_name}`;
+      }
     }
   }
-);
+  
+  loading.value = false;
+}
+
+onMounted(async () => {
+  await bankStore.fetchInstitutions();
+  await loadAllAccounts();
+});
 </script>

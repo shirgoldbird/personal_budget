@@ -3,14 +3,14 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Transactions</h1>
-        <p v-if="bankStore.selectedAccount" class="text-gray-600">
-          {{ bankStore.selectedAccount.name }} (ending in {{ bankStore.selectedAccount.last_four }})
+        <p class="text-gray-600">
+          {{ bankStore.selectedAccount ? `Filtering by: ${bankStore.selectedAccount.name}` : 'All accounts' }}
         </p>
       </div>
       <div class="mt-4 md:mt-0 flex space-x-2">
-        <router-link to="/accounts" class="btn btn-outline">
-          Back to Accounts
-        </router-link>
+        <button @click="clearAccountFilter" v-if="bankStore.selectedAccount" class="btn btn-outline">
+          Show All Accounts
+        </button>
         <button @click="exportTransactions" class="btn btn-primary">
           Export to Google Sheets
         </button>
@@ -40,15 +40,15 @@
     </div>
 
     <!-- No account selected -->
-    <div v-else-if="!bankStore.selectedAccount" class="bg-white shadow rounded-lg p-6 text-center">
+    <div v-else-if="!transactionStore.hasTransactions && !transactionStore.loading" class="bg-white shadow rounded-lg p-6 text-center">
       <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
       </svg>
-      <h3 class="mt-2 text-lg font-medium text-gray-900">No account selected</h3>
-      <p class="mt-1 text-gray-500">Please select an account to view transactions</p>
+      <h3 class="mt-2 text-lg font-medium text-gray-900">No transactions found</h3>
+      <p class="mt-1 text-gray-500">Connect an account to see your transactions</p>
       <div class="mt-6">
-        <router-link to="/accounts" class="btn btn-primary">
-          Go to Accounts
+        <router-link to="/" class="btn btn-primary">
+          Go to Dashboard
         </router-link>
       </div>
     </div>
@@ -85,8 +85,22 @@
             >
           </div>
           
-          <div class="w-full md:w-1/3">
-            <label for="filter" class="form-label">Filter By</label>
+          <div class="w-full md:w-1/4">
+            <label for="account-filter" class="form-label">Filter By Account</label>
+            <select id="account-filter" v-model="selectedAccountId" class="input" @change="filterByAccount">
+              <option value="">All Accounts</option>
+              <optgroup v-for="institution in bankStore.institutions" :key="institution.institution_name" 
+                       :label="institution.institution_name">
+                <option v-for="account in getAccountsByInstitution(institution.institution_name)" 
+                       :key="account.id" :value="account.id">
+                  {{ account.name }} ({{ account.last_four }})
+                </option>
+              </optgroup>
+            </select>
+          </div>
+          
+          <div class="w-full md:w-1/4">
+            <label for="filter" class="form-label">Filter By Type</label>
             <select id="filter" v-model="filterType" class="input" @change="applyFilters">
               <option value="all">All Transactions</option>
               <option value="income">Income Only</option>
@@ -128,6 +142,9 @@
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900">
                   {{ transaction.description }}
+                  <div class="text-xs text-gray-500 mt-1">
+                    {{ getAccountName(transaction.account_id) }}
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div class="relative">
@@ -183,6 +200,24 @@ const transactionStore = useTransactionStore();
 const searchQuery = ref('');
 const filterType = ref('all');
 const activeCategoryMenu = ref(null);
+const selectedAccountId = ref('');
+
+// Get all transactions from all accounts
+async function fetchAllTransactions() {
+  transactionStore.reset();
+  if (bankStore.hasInstitutions) {
+    for (const institution of bankStore.institutions) {
+      // First get all accounts for this institution
+      const accounts = await apiService.listAccounts(institution.institution_name);
+      
+      // Then fetch transactions for each account
+      for (const account of accounts) {
+        const transactions = await apiService.listTransactions(account.id, institution.institution_name);
+        transactionStore.addTransactions(transactions);
+      }
+    }
+  }
+}
 
 // Filter transactions based on search query and filter type
 const filteredTransactions = computed(() => {
@@ -191,15 +226,20 @@ const filteredTransactions = computed(() => {
   // First, filter by month
   const monthTransactions = transactionStore.currentMonthTransactions;
   
-  // Then filter by type (income/expense)
-  if (filterType.value === 'income') {
-    filtered = monthTransactions.filter(tx => parseFloat(tx.amount) > 0);
-  } else if (filterType.value === 'expense') {
-    filtered = monthTransactions.filter(tx => parseFloat(tx.amount) < 0);
-  } else if (filterType.value === 'uncategorized') {
-    filtered = monthTransactions.filter(tx => !tx.category || tx.category === 'Uncategorized');
+  // Then filter by account if selected
+  if (selectedAccountId.value) {
+    filtered = monthTransactions.filter(tx => tx.account_id === selectedAccountId.value);
   } else {
     filtered = monthTransactions;
+  }
+  
+  // Then filter by type (income/expense)
+  if (filterType.value === 'income') {
+    filtered = filtered.filter(tx => parseFloat(tx.amount) > 0);
+  } else if (filterType.value === 'expense') {
+    filtered = filtered.filter(tx => parseFloat(tx.amount) < 0);
+  } else if (filterType.value === 'uncategorized') {
+    filtered = filtered.filter(tx => !tx.category || tx.category === 'Uncategorized');
   }
   
   // Then filter by search query
@@ -222,6 +262,50 @@ function filterTransactions() {
 
 function applyFilters() {
   // This is handled by the computed property
+}
+
+function filterByAccount() {
+  if (selectedAccountId.value) {
+    const account = getAllAccounts().find(acc => acc.id === selectedAccountId.value);
+    if (account) {
+      bankStore.selectAccount(account);
+    }
+  } else {
+    bankStore.selectAccount(null);
+  }
+}
+
+function clearAccountFilter() {
+  selectedAccountId.value = '';
+  bankStore.selectAccount(null);
+}
+
+// Helper function to get account name for display
+function getAccountName(accountId) {
+  const allAccounts = getAllAccounts();
+  const account = allAccounts.find(acc => acc.id === accountId);
+  if (account) {
+    const institution = bankStore.institutions.find(
+      inst => inst.institution_name === account.institution?.name
+    );
+    return `${account.institution?.name || 'Unknown'} - ${account.name} (${account.last_four})`;
+  }
+  return 'Unknown Account';
+}
+
+// Helper function to get accounts by institution
+function getAccountsByInstitution(institutionName) {
+  return getAllAccounts().filter(
+    account => account.institution?.name === institutionName
+  );
+}
+
+// Helper function to get all accounts across all institutions
+function getAllAccounts() {
+  if (!bankStore._allAccounts) {
+    bankStore._allAccounts = [];
+  }
+  return bankStore._allAccounts;
 }
 
 // Category dropdown management
@@ -272,10 +356,20 @@ function handleClickOutside(event) {
   }
 }
 
-onMounted(() => {
-  // If no account is selected, redirect to accounts
-  if (!bankStore.selectedAccount && bankStore.hasInstitutions) {
-    router.push('/accounts');
+onMounted(async () => {
+  await transactionStore.fetchCategories();
+  
+  if (bankStore.hasInstitutions) {
+    if (bankStore.selectedAccount) {
+      // If a specific account is selected, just load transactions for that account
+      selectedAccountId.value = bankStore.selectedAccount.id;
+      await transactionStore.fetchTransactions(bankStore.selectedAccount.id, bankStore.selectedInstitution);
+    } else {
+      // Otherwise, load all transactions from all accounts
+      await fetchAllTransactions();
+    }
+  } else {
+    router.push('/');
   }
   
   document.addEventListener('click', handleClickOutside);

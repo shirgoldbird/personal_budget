@@ -7,6 +7,7 @@ export const useBankStore = defineStore("bank", {
     accounts: [],
     selectedInstitution: null,
     selectedAccount: null,
+    _allAccounts: [], // Cache for all accounts across institutions
     loading: false,
     error: null,
   }),
