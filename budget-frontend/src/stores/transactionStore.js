@@ -107,6 +107,37 @@ export const useTransactionStore = defineStore("transaction", {
   },
 
   actions: {
+    async fetchTransactions(accountId, institution) {
+      this.loading = true;
+      this.error = null;
+
+      try {
+        const transactions = await apiService.listTransactions(
+          accountId,
+          institution
+        );
+        // If we're fetching for a specific account, we'll replace existing transactions
+        // for that account and keep transactions from other accounts
+        if (accountId) {
+          // Remove existing transactions for this account
+          this.transactions = this.transactions.filter(
+            (tx) => tx.account_id !== accountId
+          );
+          // Add the new transactions
+          this.transactions = [...this.transactions, ...transactions];
+        } else {
+          // If no account specified, just add the transactions (used when loading all)
+          this.transactions = [...this.transactions, ...transactions];
+        }
+        this.filteredTransactions = [...this.transactions];
+      } catch (err) {
+        this.error = err.message || "Failed to fetch transactions";
+        console.error(this.error);
+      } finally {
+        this.loading = false;
+      }
+    },
+
     // Set loading state directly
     setLoading(state) {
       this.loading = state;
@@ -184,12 +215,29 @@ export const useTransactionStore = defineStore("transaction", {
       this.loading = true;
 
       try {
+        // Format transactions for export
+        const formattedTransactions = this.currentMonthTransactions.map(
+          (tx) => ({
+            id: tx.id,
+            date: tx.date,
+            account_id: tx.account_id,
+            description: tx.description,
+            amount: tx.amount,
+            category: tx.category || "Uncategorized",
+            notes: tx.notes || "",
+          })
+        );
+
+        // The API expects an object with a transactions property that is an array
         await apiService.exportTransactions({
-          transactions: this.currentMonthTransactions,
+          transactions: formattedTransactions,
         });
+
+        return true;
       } catch (err) {
         this.error = err.message || "Failed to export transactions";
         console.error(this.error);
+        throw err;
       } finally {
         this.loading = false;
       }

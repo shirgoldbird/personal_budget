@@ -379,7 +379,19 @@ function getCategoryClasses(categoryName) {
 // Export transactions to Google Sheets
 async function exportTransactions() {
   try {
-    await transactionStore.exportTransactions();
+    const transactionsToExport = filteredTransactions.value.map(tx => ({
+      id: tx.id,
+      date: tx.date,
+      account_id: tx.account_id,
+      description: tx.description,
+      amount: tx.amount,
+      category: tx.category || 'Uncategorized',
+      notes: tx.notes || ''
+    }));
+    
+    await apiService.exportTransactions({ 
+      transactions: transactionsToExport
+    });
     alert('Transactions exported to Google Sheets successfully!');
   } catch (error) {
     console.error('Export failed:', error);

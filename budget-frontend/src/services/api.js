@@ -60,8 +60,14 @@ export const apiService = {
     return response.data;
   },
 
-  async exportTransactions(transactions) {
-    const response = await api.post("/transactions/export", { transactions });
+  async exportTransactions(data) {
+    // Make sure the data is in the correct format expected by the API
+    // The API expects { transactions: [...] } where transactions is an array
+    const formattedData = {
+      transactions: Array.isArray(data.transactions) ? data.transactions : [],
+    };
+
+    const response = await api.post("/transactions/export", formattedData);
     return response.data;
   },
 
